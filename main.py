@@ -1,8 +1,15 @@
-# 科研选题智能Agent系统
-# 架构：LangGraph 多Agent协作流程
-# 包含：解析Agent、检索Agent、分析Agent、选题Agent、决策Agent
+"""
+科研选题智能 Agent 系统（可运行 MVP）。
 
-from typing import TypedDict, List, Dict
+架构：LangGraph 多 Agent 协作流程
+包含：解析 Agent、检索 Agent、分析 Agent、选题 Agent、决策 Agent
+"""
+
+from __future__ import annotations
+
+from typing import Dict, List, TypedDict
+
+from langgraph.graph import END, StateGraph
 
 # 全局状态（多Agent共享数据）
 class ResearchState(TypedDict):
@@ -13,6 +20,138 @@ class ResearchState(TypedDict):
     topic_paths: List[Dict]  # 3条候选选题
     final_recommendation: Dict
     evidence_chain: List[Dict]
+
+
+def llm_parse(user_input: str) -> List[str]:
+    """模拟需求解析：从用户输入抽取检索关键词。"""
+    base = ["RAG", "大模型", "检索增强生成", "可解释性", "评测"]
+    if "医学" in user_input:
+        return base + ["医学", "临床"]
+    return base
+
+
+def search_semantic_scholar(keywords: List[str]) -> List[Dict]:
+    """模拟 Semantic Scholar 检索。"""
+    return [
+        {
+            "id": "S1",
+            "title": "RAG Evaluation in Domain-specific QA",
+            "source": "SemanticScholar",
+            "year": 2024,
+            "score": 0.92,
+            "keywords": keywords[:3],
+        },
+        {
+            "id": "S2",
+            "title": "Improving Faithfulness of Retrieval-Augmented LLMs",
+            "source": "SemanticScholar",
+            "year": 2023,
+            "score": 0.88,
+            "keywords": keywords[:3],
+        },
+    ]
+
+
+def search_arxiv(keywords: List[str]) -> List[Dict]:
+    """模拟 arXiv 检索。"""
+    return [
+        {
+            "id": "A1",
+            "title": "A Survey of Retrieval-Augmented Generation",
+            "source": "arXiv",
+            "year": 2024,
+            "score": 0.9,
+            "keywords": keywords[:3],
+        },
+        {
+            "id": "A2",
+            "title": "RAG for Scientific Assistants: Methods and Challenges",
+            "source": "arXiv",
+            "year": 2025,
+            "score": 0.86,
+            "keywords": keywords[:3],
+        },
+    ]
+
+
+def deduplicate_and_filter(papers: List[Dict]) -> List[Dict]:
+    """去重并按年份与相关性过滤排序。"""
+    by_title: Dict[str, Dict] = {}
+    for paper in papers:
+        title = paper["title"]
+        if title not in by_title or paper["score"] > by_title[title]["score"]:
+            by_title[title] = paper
+    filtered = [p for p in by_title.values() if p["year"] >= 2023]
+    return sorted(filtered, key=lambda x: (x["score"], x["year"]), reverse=True)
+
+
+def llm_analyze_field(titles: List[str]) -> Dict:
+    """模拟领域分析结果。"""
+    return {
+        "hot_topics": [
+            "retrieval quality and reranking",
+            "faithfulness and hallucination control",
+            "domain adaptation for enterprise/science data",
+        ],
+        "gaps": [
+            "缺少统一评测协议",
+            "跨领域迁移性能波动明显",
+            "证据可追溯性与解释性不足",
+        ],
+        "title_count": len(titles),
+    }
+
+
+def llm_generate_topics(user_input: str, field_overview: Dict) -> List[Dict]:
+    """模拟生成 3 条候选选题路径。"""
+    return [
+        {
+            "id": "T1",
+            "name": "面向科研问答的可追溯 RAG 评测框架",
+            "innovation": "引入证据链一致性指标，统一比较不同 RAG 管线。",
+            "feasibility": "中高",
+            "value": "高",
+            "based_on": field_overview.get("hot_topics", [])[:2],
+        },
+        {
+            "id": "T2",
+            "name": "RAG 中重排序策略对事实一致性的影响研究",
+            "innovation": "系统分析不同 reranker 对 hallucination 的抑制效果。",
+            "feasibility": "高",
+            "value": "中高",
+            "based_on": field_overview.get("hot_topics", [])[:2],
+        },
+        {
+            "id": "T3",
+            "name": "面向垂直领域的轻量化 RAG 迁移方法",
+            "innovation": "在低算力条件下保持召回与生成质量平衡。",
+            "feasibility": "中",
+            "value": "中高",
+            "based_on": [user_input] + field_overview.get("gaps", [])[:1],
+        },
+    ]
+
+
+def llm_judge_best_topic(topic_paths: List[Dict], field_overview: Dict):
+    """模拟决策收敛：选择最优选题并返回证据链。"""
+    _ = field_overview
+    best = topic_paths[0]
+    evidence = [
+        {
+            "paper_id": "S1",
+            "reason": "支持统一评测框架的必要性。",
+        },
+        {
+            "paper_id": "A1",
+            "reason": "综述显示证据可追溯与可信评测是关键痛点。",
+        },
+    ]
+    recommendation = {
+        "topic_id": best["id"],
+        "topic_name": best["name"],
+        "why": "创新性与学术价值较高，同时可在学期内完成 MVP。",
+    }
+    return recommendation, evidence
 
 # ===================== Agent 1：需求解析Agent =====================
 def parse_requirement_agent(state: ResearchState):
@@ -93,3 +232,7 @@ if __name__ == "__main__":
         "final_recommendation": {},
         "evidence_chain": []
     })
+    print("=== Final Recommendation ===")
+    print(result["final_recommendation"])
+    print("=== Evidence Chain ===")
+    print(result["evidence_chain"])
